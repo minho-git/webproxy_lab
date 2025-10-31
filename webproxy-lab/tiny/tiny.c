@@ -19,7 +19,7 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
 
 int main(int argc, char **argv)
 {
-  int listenfd, connfd;
+  int listenfd, connfd; //test
   char hostname[MAXLINE], port[MAXLINE];
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
