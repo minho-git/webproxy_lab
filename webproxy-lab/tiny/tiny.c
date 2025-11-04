@@ -7,7 +7,7 @@
  *   - Fixed sprintf() aliasing issue in serve_static(), and clienterror().
  */
 #include "csapp.h"
-#include <cstdio>
+#include "stdio.h"
 #include <string.h>
 
 void doit(int fd);
@@ -60,11 +60,11 @@ void doit(int fd) {
     printf("Request headers:\n");
     printf("%s", buf);
     sscanf(buf, "%s %s %s", method, uri, version); // buf에서 method, uri, version 채워 넣기.
-    
+
     if (strcasecmp(method, "GET") == 0) {
         //pass
     } else if (strcasecmp(method, "HEAD") == 0) { // method가 GET 방식이 아닌 경우 에러 출력하고 종료.
-       is_head = 1; 
+       is_head = 1;
     } else {
         clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
         return;
@@ -176,15 +176,15 @@ void serve_static(int fd, char *filename, int filesize, int head) {
         // Close(srcfd);
         // Rio_writen(fd, srcp, filesize);
         // Munmap(srcp, filesize);
-    
+
         // 11.9
         // mmap, Rio_writen -> malloc, Rio_readn, Rio_writen
         // 파일 사이즈만큼 말록 할당해서 얻은 포인터를 read 인자로 넘기고 쓰자
-    
+
         start = (char *)Malloc(filesize);
         Rio_readn(srcfd, start, filesize);
         Rio_writen(fd, start, filesize);
-    
+
         Close(srcfd);
         free(start);
     }
