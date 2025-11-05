@@ -1,15 +1,17 @@
 #include <stdio.h>
 #include <string.h>
 #include "csapp.h"
+#include "cache.h" // <<<--- 여기를 수정했습니다 (cache.c -> cache.h)
 
-/* Recommended max cache and object sizes */
-#define MAX_CACHE_SIZE 1049000
-#define MAX_OBJECT_SIZE 102400
+/*
+ * MAX_CACHE_SIZE와 MAX_OBJECT_SIZE 정의는
+ * 이제 cache.h에 있습니다.
+ */
 
-void doit(int fd);
+Cache cache; //캐시 전역변수로 선언
+
+void *doit(void *vargp);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
-
-
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr =
@@ -27,14 +29,17 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    cache_init(&cache); // 캐시 초기화
+
     // 소켓 연결 대기
     listenfd = Open_listenfd(argv[1]);
 
     while(1) {
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (struct sockaddr *)&clientaddr, &clientlen);
-        doit(connfd);
-        Close(connfd);
+        pthread_t tid;
+
+        Pthread_create(&tid, NULL, doit, (void *)connfd);
     }
 }
 
@@ -67,7 +72,9 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
     Rio_writen(fd, body, strlen(body));
 }
 
-void doit(int fd) {
+void *doit(void *vargp) {
+
+    Pthread_detach(pthread_self());
 
     rio_t rio, server_rio;
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE], server_buf[MAXLINE];
@@ -77,25 +84,44 @@ void doit(int fd) {
     int host_header_found = 0;
     int serverfd;
     size_t n;
+    int fd = (int)vargp;
+
+
+    // (요청대로 2번 문제는 수정하지 않았습니다 - 스택 오버플로우 위험)
+    char cache_buf[MAX_CACHE_SIZE];
+    char response_buf[MAX_OBJECT_SIZE];
+    size_t response_size = 0;
+    size_t cache_size;
+    int too_large = 0;
+
 
     // 요청 버퍼
     char request_buf[MAXLINE];
 
     Rio_readinitb(&rio, fd);
     if (Rio_readlineb(&rio, buf, MAXLINE) <= 0) {
-        return; // 클라이언트가 아무것도 안 보냈으면 종료
+        return NULL; // 클라이언트가 아무것도 안 보냈으면 종료
     }
 
     if (sscanf(buf, "%s %s %s", method, uri, version) != 3) {
         // 3개가 아니면 "400 Bad Request" 에러 전송
         clienterror(fd, buf, "400", "Bad Request",
                     "Proxy received a malformed request line");
-        return;
+        return NULL;
     }
 
     if (strcasecmp(method, "GET") != 0) {
         clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
-        return;
+        return NULL;
+    }
+
+    // (요청대로 3번 문제는 수정하지 않았습니다 - LRU 로직)
+    if (cache_find(uri, cache_buf, &cache_size, &cache)) { // HIT!
+
+        Rio_writen(fd, cache_buf, cache_size);
+        Close(fd);
+        return NULL;
+
     }
 
     // uri -> [http://] + [hostname_with_port] + [path]로 분리하기
@@ -109,7 +135,7 @@ void doit(int fd) {
         // URI가 "http://"로 시작하지 않는 등 형식이 잘못됨
         clienterror(fd, uri, "400", "Bad Request",
                     "Proxy received a malformed URI");
-        return;
+        return NULL;
     }
 
     // hostname_with_port -> [hostname] + [port]
@@ -178,15 +204,30 @@ void doit(int fd) {
     Rio_readinitb(&server_rio, serverfd);
     Rio_writen(serverfd, request_buf, strlen(request_buf));
 
+
+
     // 서버에게 응답 받아서 클라이언트에게 보내주기
     while ((n = Rio_readnb(&server_rio, server_buf, MAXLINE)) > 0) {
-
         Rio_writen(fd, server_buf, n);
-    }
 
+        if (response_size + n <= MAX_OBJECT_SIZE) {
+            memcpy(response_buf + response_size, server_buf, n);
+            response_size += n;
+        } else {
+            too_large = 1;
+        }
+    }
 
     Close(serverfd);
 
 
+    // 여기서 캐시에 저장하기
+    if (!too_large) {
+        cache_store(&cache, uri, response_buf, response_size);
+    }
+
+
+    Close(fd);
+    return NULL;
 
 }

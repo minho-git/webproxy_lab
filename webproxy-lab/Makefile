@@ -1,4 +1,4 @@
-# Makefile for Proxy Lab 
+# Makefile for Proxy Lab
 #
 # You may modify this file any way you like (except for the handin
 # rule). You instructor will type "make" on your specific Makefile to
@@ -13,11 +13,20 @@ all: proxy
 csapp.o: csapp.c csapp.h
 	$(CC) $(CFLAGS) -c csapp.c
 
-proxy.o: proxy.c csapp.h
+proxy.o: proxy.c csapp.h cache.h
 	$(CC) $(CFLAGS) -c proxy.c
 
-proxy: proxy.o csapp.o
-	$(CC) $(CFLAGS) proxy.o csapp.o -o proxy $(LDFLAGS)
+# --- 추가된 부분 ---
+# 새 cache.c 파일을 컴파일하는 규칙
+cache.o: cache.c csapp.h cache.h
+	$(CC) $(CFLAGS) -c cache.c
+# --- 여기까지 ---
+
+# --- 수정된 부분 ---
+# proxy를 만들 때 cache.o도 함께 링크합니다.
+proxy: proxy.o csapp.o cache.o
+	$(CC) $(CFLAGS) proxy.o csapp.o cache.o -o proxy $(LDFLAGS)
+# --- 여기까지 ---
 
 # Creates a tarball in ../proxylab-handin.tar that you can then
 # hand in. DO NOT MODIFY THIS!
@@ -26,4 +35,3 @@ handin:
 
 clean:
 	rm -f *~ *.o proxy core *.tar *.zip *.gzip *.bzip *.gz
-
